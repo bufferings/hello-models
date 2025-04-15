@@ -16,7 +16,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PROMPT: "今日の運勢を教えて！"
         run: |
-          RESPONSE=$(curl "https://models.github.ai/inference/chat/completions" \
+          # API呼び出しと生のレスポンスの保存
+          RAW_RESPONSE=$(curl "https://models.github.ai/inference/chat/completions" \
              -H "Content-Type: application/json" \
              -H "Authorization: Bearer $GITHUB_TOKEN" \
              -d '{
@@ -29,10 +30,13 @@ jobs:
                "model": "openai/gpt-4o"
             }')
 
-          # レスポンスからコンテンツ部分を抽出
-          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          # 生のレスポンスを一時ファイルに保存
+          echo "$RAW_RESPONSE" > raw_response.json
 
-          # レスポンスを一時ファイルに保存
+          # レスポンスからコンテンツ部分を抽出
+          CONTENT=$(echo "$RAW_RESPONSE" | jq -r '.choices[0].message.content')
+
+          # 整形したレスポンスを一時ファイルに保存
           echo "$CONTENT" > model_response.txt
 
           # GitHub Actionsのoutputとして設定
@@ -40,13 +44,21 @@ jobs:
           echo "$CONTENT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Output response as annotations
+          echo "raw_response<<EOF" >> $GITHUB_OUTPUT
+          echo "$RAW_RESPONSE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Output response as log
         run: |
+          echo "=========================================="
           echo "GitHub Modelsからのレスポンス:"
-
-          # レスポンス全体を1つのアノテーションとして出力
-          echo "::notice title=AI Response::${{ steps.model-call.outputs.response }}"
-
-          # 全体レスポンスも通常のログとして表示
-          echo "---完全なレスポンス---"
+          echo "=========================================="
           echo "${{ steps.model-call.outputs.response }}"
+          echo "=========================================="
+
+          echo ""
+          echo "=========================================="
+          echo "GitHub Modelsからの生のJSON レスポンス:"
+          echo "=========================================="
+          echo "${{ steps.model-call.outputs.raw_response }}"
+          echo "=========================================="
