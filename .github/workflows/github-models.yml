@@ -1,7 +1,7 @@
 name: GitHub Models API Example
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 permissions:
   models: read
@@ -11,18 +11,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call AI model
+        id: model-call
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROMPT: "今日の運勢を教えて！"
         run: |
-          curl "https://models.github.ai/inference/chat/completions" \
+          RESPONSE=$(curl "https://models.github.ai/inference/chat/completions" \
              -H "Content-Type: application/json" \
              -H "Authorization: Bearer $GITHUB_TOKEN" \
              -d '{
               "messages": [
                   {
                      "role": "user",
-                     "content": "僕の運勢を教えて！"
+                     "content": "'"$PROMPT"'"
                   }
                ],
                "model": "openai/gpt-4o"
-            }'
+            }')
+
+          # レスポンスからコンテンツ部分を抽出
+          CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+
+          # レスポンスを一時ファイルに保存
+          echo "$CONTENT" > model_response.txt
+
+          # GitHub Actionsのoutputとして設定
+          echo "response<<EOF" >> $GITHUB_OUTPUT
+          echo "$CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Output response as annotations
+        run: |
+          echo "GitHub Modelsからのレスポンス:"
+
+          # レスポンスを改行区切りでアノテーションとして出力
+          while IFS= read -r line; do
+            if [ -n "$line" ]; then
+              echo "::notice::$line"
+            fi
+          done < <(echo "${{ steps.model-call.outputs.response }}")
+
+          # 全体レスポンスも表示
+          echo "---完全なレスポンス---"
+          echo "${{ steps.model-call.outputs.response }}"
